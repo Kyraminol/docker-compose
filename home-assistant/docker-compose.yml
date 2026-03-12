@@ -1,0 +1,42 @@
+version: "3.9"
+services:
+  home-assistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    volumes:
+      - config:/config
+      - www:/home/homeassistant/www
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=Europe/Rome
+      - PUID=${UID:?missing_UID}
+      - PGID=${UID:?missing_UID}
+      - PACKAGES=iputils s6-ipcserver ${PACKAGES}
+    network_mode: host
+    restart: unless-stopped
+    command: /bin/sh -c 'wget -O /etc/services.d/home-assistant/run https://raw.githubusercontent.com/tribut/homeassistant-docker-venv/master/run && /init'
+
+  configurator:
+    image: causticlab/hass-configurator-docker:latest
+    depends_on:
+      - home-assistant
+    volumes:
+      - configurator:/config
+      - config:/hass-config
+    networks:
+      - traefik_bridge
+    labels:
+      - traefik.enable=true
+      - traefik.http.services.hass-configurator.loadbalancer.server.port=3218
+      - traefik.custom.host.start=hass-configurator
+    restart: unless-stopped
+
+
+volumes:
+  config:
+  www:
+  configurator:
+
+networks:
+  traefik_bridge:
+    external: true
+

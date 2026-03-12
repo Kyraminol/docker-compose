@@ -1,0 +1,6 @@
+version: "3.9"
+services:
+  home-assistant:
+    devices:
+      - ${ZIGBEE_HUB_DEV?:missing_ZIGBEE_HUB_DEV}:/dev/ttyUSB0
+
