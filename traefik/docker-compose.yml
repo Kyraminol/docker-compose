@@ -1,0 +1,65 @@
+version: "3.9"
+services:
+  traefik:
+    image: traefik:latest
+    restart: unless-stopped
+    command:
+      - "--log.level=DEBUG"
+      - "--api.dashboard=true"
+      - "--certificatesresolvers.cloudflare.acme.email=${EMAIL:?missing_EMAIL}"
+      - "--certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare"
+      - "--certificatesResolvers.cloudflare.acme.dnsChallenge.disablePropagationCheck=true"
+      - "--certificatesResolvers.cloudflare.acme.dnsChallenge.delayBeforeCheck=60"
+      - "--certificatesresolvers.cloudflare.acme.storage=/letsencrypt/acme.json"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.websecure.http.tls=true"
+      - "--entrypoints.websecure.http.tls.certResolver=cloudflare"
+      - "--entrypoints.websecure.http.tls.domains[0].main=${DOMAIN:?missing_DOMAIN}"
+      - "--entrypoints.websecure.http.tls.domains[0].sans=*.${DOMAIN:?missing_DOMAIN}"
+      - "--entrypoints.websecure.transport.respondingTimeouts.readTimeout=0"
+      - "--serversTransport.insecureskipverify=true"
+      - "--tcpServersTransport.dialTimeout=180s"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedByDefault=false"
+      - "--providers.docker.network=traefik_bridge"
+      - "--providers.docker.constraints=Label(`traefik.custom.instance`, `${TRAEFIK_CUSTOM_INSTANCE:-global}`) || !LabelRegex(`traefik.custom.instance`, `.+`)"
+      - "--providers.docker.defaultRule={{ if index .Labels \"traefik.custom.rule\" }}{{ index .Labels \"traefik.custom.rule\" }}{{ else }}Host{{ end }}(`{{ if index .Labels \"traefik.custom.host.start\" }}{{ index .Labels \"traefik.custom.host.start\" }}{{ else }}{{ index .Labels \"com.docker.stack.namespace\" }}{{ end }}.${DOMAIN:?missing_DOMAIN}{{ if index .Labels \"traefik.custom.host.end\" }}{{ index .Labels \"traefik.custom.host.end\" }}{{ end }}`){{ if index .Labels \"traefik.custom.extend\" }} {{ index .Labels \"traefik.custom.extend\" }}{{ end }}"
+      - "--providers.file.directory=/dynamic-conf"
+      - "--providers.file.watch=true"
+    environment:
+       - CLOUDFLARE_DNS_API_TOKEN=${CLOUDFLARE_DNS_API_TOKEN:?missing_CLOUDFLARE_DNS_API_TOKEN}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - certs:/letsencrypt
+      - dynamic_conf:/dynamic-conf
+    ports:
+      - target: 80
+        published: ${PORT_HTTP:-80}
+        protocol: tcp
+        mode: host
+      - target: 443
+        published: ${PORT_HTTPS:-443}
+        protocol: tcp
+        mode: host
+    labels:
+      - traefik.enable=true
+      - traefik.http.services.dashboard.loadbalancer.server.port=8080
+      - traefik.http.routers.dashboard.service=api@internal
+      - traefik.http.routers.dashboard.entrypoints=${ENTRYPOINTS:-websecure}
+      - traefik.docker.network=default
+    networks:
+      default:
+      bridge:
+        aliases:
+          - traefik-global
+
+networks:
+  bridge:
+
+volumes:
+  certs:
+  dynamic_conf:
+
